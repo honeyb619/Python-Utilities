@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Merge PDFs</title>
+    <style>
+      body { font-family: Arial, sans-serif; max-width: 760px; margin: 2rem auto; }
+      input[type=file] { display:block; margin-bottom: 1rem }
+      .notice { color: #b00 }
+    </style>
+  </head>
+  <body>
+    <h1>Merge PDFs</h1>
+    <form method="post" action="/merge" enctype="multipart/form-data">
+      <label>PDF Files (multiple):
+        <input type="file" name="files" multiple accept="application/pdf" required />
+      </label>
+      <label>Page Size (optional):
+        <input type="text" name="page_size" placeholder="largest, smallest, first, or 8.5inx11in" />
+      </label>
+      <p>
+        <button type="submit">Merge</button>
+      </p>
+    </form>
+    <p class="notice">Note: by default original page sizes are preserved. Provide a page size to enable resizing.</p>
+  </body>
+</html>

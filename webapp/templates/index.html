@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Merge PDFs</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+  </head>
+  <body>
+    <div class="container">
+      <div class="app-header">
+        <div>
+          <h1>Merge PDFs</h1>
+          <div class="app-sub">Upload multiple PDFs, preview them, and merge into a single file.</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="form-grid">
+              
+          <form id="merge-form" method="post" action="/merge" enctype="multipart/form-data">
+            <div class="input-row">
+              <label class="small">PDF Files (multiple)</label>
+              <input id="files-input" type="file" name="files" multiple accept="application/pdf" required />
+              <ul id="selected-files" class="file-list" aria-live="polite"></ul>
+
+              <label class="small">Page Size (optional)</label>
+              <input type="text" name="page_size" placeholder="largest, smallest, first, or 8.5inx11in" />
+
+              <div style="margin-top:0.5rem">
+                <button id="merge-button" class="btn" type="submit">Merge</button>
+                <span class="small" style="margin-left:0.5rem">Note: leaving page size blank preserves original sizes.</span>
+              </div>
+            
+            </div>
+          </form>
+        </div>
+
+        <div style="margin-top:0.75rem">
+          <div class="small" style="margin-bottom:0.35rem">Selected file preview</div>
+          <div class="preview-frames preview">
+            <iframe id="selected-preview" style="display:none"></iframe>
+          </div>
+        </div>
+      </div>
+
+      const filesInput = document.getElementById('files-input'); 
+      const selectedFilesEl = document.getElementById('selected-files'); 
+        <div class="preview-frames preview">
+          <iframe id="merged-preview" style="display:none"></iframe>
+        </div>
+        <div style="margin-top:0.6rem">
+          <a id="merged-download" class="download-link" style="display:none" download="merged.pdf">Download merged PDF</a>
+        </div>
+      </div>
+
+      <div class="footer">Templates are in webapp/templates — the UI shows selected files and previews.</div>
+    </div>
+
+    <script>
+      const filesInput = document.getElementById('files-input');
+      const selectedFilesEl = document.getElementById('selected-files');
+      const selectedPreview = document.getElementById('selected-preview');
+      const mergedPreview = document.getElementById('merged-preview');
+      const mergedDownload = document.getElementById('merged-download');
+      const mergeButton = document.getElementById('merge-button');
+      const mergeForm = document.getElementById('merge-form');
+
+      // store selected files and per-file metadata (order matters)
+      let selectedFilesArray = [];
+
+      function swapArray(arr, i, j) {
+        const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      }
+
+      function renderSelectedList() {
+        selectedFilesEl.innerHTML = '';
+        if (!selectedFilesArray.length) {
+          const li = document.createElement('li'); li.textContent = 'No files selected.'; selectedFilesEl.appendChild(li);
+          selectedPreview.style.display = 'none';
+          return;
+        }
+
+        selectedFilesArray.forEach((obj, idx) => {
+          const f = obj.file;
+          const li = document.createElement('li');
+          li.draggable = true;
+
+          // reorder buttons
+          const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.title = 'Move up';
+          const down = document.createElement('button'); down.type = 'button'; down.textContent = '↓'; down.title = 'Move down';
+          up.style.marginRight = '0.25rem'; down.style.marginRight = '0.45rem';
+          up.addEventListener('click', () => { if (idx > 0) { swapArray(selectedFilesArray, idx, idx-1); renderSelectedList(); } });
+          down.addEventListener('click', () => { if (idx < selectedFilesArray.length - 1) { swapArray(selectedFilesArray, idx, idx+1); renderSelectedList(); } });
+
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = f.name;
+          nameSpan.style.marginRight = '0.6rem';
+
+          // per-file resize selector
+          const sel = document.createElement('select');
+          sel.innerHTML = '<option value="preserve">Preserve</option><option value="global">Use global</option><option value="A4">A4 (210×297 mm)</option><option value="Letter">Letter (8.5×11 in)</option><option value="custom">Custom</option>';
+          sel.style.marginRight = '0.4rem';
+          sel.value = obj.resize || 'preserve';
+
+          const sizeInput = document.createElement('input');
+          sizeInput.placeholder = 'e.g. 8.5inx11in';
+          sizeInput.style.display = obj.resize === 'custom' ? '' : 'none';
+          sizeInput.style.width = '9rem';
+          sizeInput.value = obj.customSize || '';
+
+          sel.addEventListener('change', () => {
+            obj.resize = sel.value;
+            sizeInput.style.display = sel.value === 'custom' ? '' : 'none';
+          });
+
+          sizeInput.addEventListener('input', () => {
+            obj.customSize = sizeInput.value;
+          });
+
+          nameSpan.addEventListener('click', () => {
+            const url = URL.createObjectURL(f);
+            selectedPreview.src = url; selectedPreview.style.display = '';
+          });
+
+          // drag and drop handlers
+          li.addEventListener('dragstart', (e) => {
+            e.dataTransfer.setData('text/plain', String(idx));
+            e.dataTransfer.effectAllowed = 'move';
+            li.classList.add('dragging');
+          });
+          li.addEventListener('dragend', () => li.classList.remove('dragging'));
+          li.addEventListener('dragover', (e) => { e.preventDefault(); });
+          li.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const from = parseInt(e.dataTransfer.getData('text/plain'), 10);
+            const to = idx;
+            if (!Number.isNaN(from) && from !== to) {
+              const item = selectedFilesArray.splice(from, 1)[0];
+              selectedFilesArray.splice(to, 0, item);
+              renderSelectedList();
+            }
+          });
+
+          li.appendChild(up);
+          li.appendChild(down);
+          li.appendChild(nameSpan);
+          li.appendChild(sel);
+          li.appendChild(sizeInput);
+          li.style.display = 'flex';
+          li.style.alignItems = 'center';
+          li.style.gap = '0.5rem';
+          selectedFilesEl.appendChild(li);
+          // auto-preview first file
+          if (idx === 0) {
+            const url = URL.createObjectURL(f);
+            selectedPreview.src = url; selectedPreview.style.display = '';
+          }
+        });
+      }
+
+      filesInput.addEventListener('change', (ev) => {
+        selectedFilesArray = Array.from(filesInput.files || []).map(f => ({ file: f, resize: 'preserve', customSize: '' }));
+        renderSelectedList();
+      });
+
+      // AJAX submit so we can preview the merged PDF without leaving the page
+      mergeForm.addEventListener('submit', async (ev) => {
+        ev.preventDefault();
+        mergeButton.disabled = true;
+        mergeButton.textContent = 'Merging...';
+        mergedPreview.style.display = 'none';
+        mergedDownload.style.display = 'none';
+
+        // build FormData manually so we can control file order
+        const fd = new FormData();
+        // include global page_size
+        const pageSizeInput = mergeForm.querySelector('input[name="page_size"]');
+        if (pageSizeInput) fd.append('page_size', pageSizeInput.value || '');
+
+        // append files in the current user order and their per-file resize spec
+        selectedFilesArray.forEach((obj) => {
+          fd.append('files', obj.file, obj.file.name);
+          let val = obj.resize || 'preserve';
+          if (val === 'custom' && obj.customSize) val = obj.customSize;
+          fd.append('file_resize', val);
+        });
+
+        try {
+          const resp = await fetch(mergeForm.action, { method: 'POST', body: fd });
+          if (!resp.ok) throw new Error('Server returned ' + resp.status);
+          const blob = await resp.blob();
+          const url = URL.createObjectURL(blob);
+          mergedPreview.src = url;
+          mergedPreview.style.display = '';
+          mergedDownload.href = url;
+          mergedDownload.style.display = '';
+        } catch (err) {
+          alert('Error: ' + err.message);
+        } finally {
+          mergeButton.disabled = false;
+          mergeButton.textContent = 'Merge';
+        }
+      });
+
+      // initial state
+      renderSelectedList();
+    </script>
+  </body>
+</html>
