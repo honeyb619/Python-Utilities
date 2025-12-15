@@ -16,6 +16,10 @@
         <button type="button" id="compress-add-file" class="btn" style="background:#059669">+ Add file</button>
         <div id="compress-file-name" class="small" aria-live="polite"></div>
 
+        <label class="small" style="margin-top:0.5rem">Output File Name (optional)</label>
+        <input id="compress-output-filename" type="text" name="output_filename" placeholder="e.g. optimized.pdf" style="width:100%;max-width:300px" />
+        <div class="small" style="color:#666;margin-top:0.25rem">.pdf extension will be added if not provided</div>
+
         <label class="small" style="margin-top:0.5rem">Algorithm</label>
         <select id="algorithm" name="algorithm">
           <option value="lossless">Lossless (compress content streams)</option>
@@ -49,6 +53,22 @@
           <button id="compress-button" class="btn" type="submit">Compress</button>
           <a id="compressed-download" class="download-link" style="display:none" download="compressed.pdf">Download compressed PDF</a>
           <button type="button" id="upload-to-drive-btn" class="btn" style="background:#1e88e5;display:none">📤 Upload to Drive</button>
+          <button type="button" id="share-whatsapp-btn" class="btn" style="background:#25d366;display:none">💬 Share to WhatsApp</button>
+        </div>
+
+        <div id="drive-folder-section" style="margin-top:0.75rem;padding:0.75rem;background:#f5f5f5;border-radius:4px;display:none">
+          <div class="small" style="margin-bottom:0.5rem;font-weight:600">Google Drive Folder</div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
+            <select id="folder-select" style="flex:1;min-width:200px">
+              <option value="">Root folder</option>
+            </select>
+            <button type="button" id="refresh-folders-btn" class="btn" style="background:#666;padding:0.4rem 0.8rem;font-size:0.85rem">🔄 Refresh</button>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+            <input id="new-folder-name" type="text" placeholder="New folder name..." style="flex:1;min-width:150px" />
+            <button type="button" id="create-folder-btn" class="btn" style="background:#059669;padding:0.4rem 0.8rem;font-size:0.85rem">➕ Create Folder</button>
+          </div>
+          <div id="folder-status" class="small" style="margin-top:0.5rem;color:#666"></div>
         </div>
 
         <div id="size-stats" class="small" style="margin-top:0.25rem;display:none">
@@ -93,6 +113,12 @@
   const sizeCompressed = document.getElementById('size-compressed');
   const sizeSavings = document.getElementById('size-savings');
   const uploadToDriveBtn = document.getElementById('upload-to-drive-btn');
+  const driveFolderSection = document.getElementById('drive-folder-section');
+  const folderSelect = document.getElementById('folder-select');
+  const refreshFoldersBtn = document.getElementById('refresh-folders-btn');
+  const newFolderNameInput = document.getElementById('new-folder-name');
+  const createFolderBtn = document.getElementById('create-folder-btn');
+  const folderStatus = document.getElementById('folder-status');
   let originalBytes = null;
   let compressedBlob = null;
 
@@ -186,8 +212,17 @@
       const zoom = compressedPreview.dataset.zoom || 'page-width';
       compressedPreview.src = url + '#zoom=' + zoom;
       compressedPreview.style.display = '';
-      downloadLink.href = url; downloadLink.style.display = '';
+      downloadLink.href = url;
+      // Update download filename from the form input
+      const customFilename = document.getElementById('compress-output-filename').value.trim();
+      if (customFilename) {
+        downloadLink.download = customFilename.endsWith('.pdf') ? customFilename : customFilename + '.pdf';
+      } else {
+        downloadLink.download = 'compressed.pdf';
+      }
+      downloadLink.style.display = '';
       uploadToDriveBtn.style.display = '';
+      document.getElementById('share-whatsapp-btn').style.display = '';
       // update sizes
       const compBytes = blob.size;
       sizeCompressed.textContent = (compBytes/1024/1024).toFixed(2) + ' MB';
@@ -205,6 +240,74 @@
     }
   });
 
+  // Load folders when upload button becomes visible
+  async function loadFolders() {
+    try {
+      const resp = await fetch('/drive/folders');
+      const result = await resp.json();
+      if (result.folders) {
+        folderSelect.innerHTML = '<option value="">Root folder</option>';
+        result.folders.forEach(folder => {
+          const option = document.createElement('option');
+          option.value = folder.id;
+          option.textContent = folder.name;
+          folderSelect.appendChild(option);
+        });
+        folderStatus.textContent = `${result.folders.length} folders loaded`;
+      }
+    } catch (err) {
+      folderStatus.textContent = '❌ Failed to load folders';
+    }
+  }
+
+  refreshFoldersBtn.addEventListener('click', async () => {
+    refreshFoldersBtn.disabled = true;
+    refreshFoldersBtn.textContent = '🔄 Loading...';
+    await loadFolders();
+    refreshFoldersBtn.disabled = false;
+    refreshFoldersBtn.textContent = '🔄 Refresh';
+  });
+
+  createFolderBtn.addEventListener('click', async () => {
+    const folderName = newFolderNameInput.value.trim();
+    if (!folderName) {
+      alert('Please enter a folder name');
+      return;
+    }
+
+    createFolderBtn.disabled = true;
+    createFolderBtn.textContent = '⏳ Creating...';
+    folderStatus.textContent = 'Creating folder...';
+
+    try {
+      const resp = await fetch('/drive/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ folder_name: folderName })
+      });
+      const result = await resp.json();
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Add new folder to dropdown
+      const option = document.createElement('option');
+      option.value = result.folder_id;
+      option.textContent = result.folder_name;
+      folderSelect.appendChild(option);
+      folderSelect.value = result.folder_id;
+      
+      newFolderNameInput.value = '';
+      folderStatus.textContent = `✓ Folder "${result.folder_name}" created!`;
+    } catch (err) {
+      folderStatus.textContent = `❌ ${err.message}`;
+    } finally {
+      createFolderBtn.disabled = false;
+      createFolderBtn.textContent = '➕ Create Folder';
+    }
+  });
+
   // Upload to Drive functionality
   uploadToDriveBtn.addEventListener('click', async () => {
     if (!compressedBlob) {
@@ -216,9 +319,23 @@
     uploadToDriveBtn.textContent = '📤 Uploading...';
     
     try {
+      // Use custom filename from the input, or default to compressed.pdf
+      let driveFilename = document.getElementById('compress-output-filename').value.trim();
+      if (!driveFilename) {
+        driveFilename = 'compressed.pdf';
+      } else if (!driveFilename.toLowerCase().endsWith('.pdf')) {
+        driveFilename += '.pdf';
+      }
+      
       const fd = new FormData();
-      fd.append('file', compressedBlob, 'compressed.pdf');
-      fd.append('filename', 'compressed.pdf');
+      fd.append('file', compressedBlob, driveFilename);
+      fd.append('filename', driveFilename);
+      
+      // Add folder ID if selected
+      const folderId = folderSelect.value;
+      if (folderId) {
+        fd.append('folder_id', folderId);
+      }
       
       const resp = await fetch('/drive/upload', { method: 'POST', body: fd });
       const result = await resp.json();
@@ -233,6 +350,58 @@
     } finally {
       uploadToDriveBtn.disabled = false;
       uploadToDriveBtn.textContent = '📤 Upload to Drive';
+    }
+  });
+
+  // Show folder section when upload button appears
+  const originalUploadDisplay = uploadToDriveBtn.style.display;
+  const observer = new MutationObserver(() => {
+    if (uploadToDriveBtn.style.display !== 'none' && driveFolderSection.style.display === 'none') {
+      driveFolderSection.style.display = '';
+      loadFolders();
+    }
+  });
+  observer.observe(uploadToDriveBtn, { attributes: true });
+
+  // WhatsApp share functionality
+  const shareWhatsAppBtn = document.getElementById('share-whatsapp-btn');
+  
+  shareWhatsAppBtn.addEventListener('click', async () => {
+    if (!downloadLink.href || downloadLink.href === '#') {
+      alert('No compressed PDF available. Please compress a PDF first.');
+      return;
+    }
+
+    try {
+      // Get the PDF blob from the download link
+      const response = await fetch(downloadLink.href);
+      const blob = await response.blob();
+      
+      // Get custom filename or use default
+      const filenameInput = document.getElementById('output-filename');
+      let filename = (filenameInput && filenameInput.value.trim()) || 'compressed.pdf';
+      if (!filename.toLowerCase().endsWith('.pdf')) {
+        filename += '.pdf';
+      }
+      
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      // Check if Web Share API is supported
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Compressed PDF',
+          text: 'Sharing compressed PDF file'
+        });
+      } else {
+        // Fallback: show instructions
+        alert('Web Share is not supported on this browser.\\n\\nTo share via WhatsApp:\\n1. Download the PDF using the Download button\\n2. Open WhatsApp\\n3. Attach the downloaded file');
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Share error:', err);
+        alert('Failed to share: ' + err.message);
+      }
     }
   });
 </script>

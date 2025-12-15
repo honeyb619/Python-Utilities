@@ -18,7 +18,11 @@
               <button type="button" id="add-more-files" class="btn" style="background:#059669">+ Add files</button>
               <ul id="selected-files" class="file-list" aria-live="polite"></ul>
 
-              <label class="small">Global Page Size (optional)</label>
+              <label class="small">Output File Name (optional)</label>
+              <input id="output-filename" type="text" name="output_filename" placeholder="e.g. combined.pdf" style="width:100%;max-width:300px" />
+              <div class="small" style="color:#666;margin-top:0.25rem">.pdf extension will be added if not provided</div>
+
+              <label class="small" style="margin-top:0.5rem">Global Page Size (optional)</label>
               <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
                 <select id="page-size-select" style="flex:1;min-width:180px">
                   <option value="">Preserve original</option>
@@ -42,6 +46,27 @@
           </form>
         </div>
 
+        <div style="margin-top:0.75rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+          <a id="merged-download" class="download-link" style="display:none" download="merged.pdf">Download merged PDF</a>
+          <button type="button" id="upload-to-drive-btn" class="btn" style="background:#1e88e5;display:none">📤 Upload to Drive</button>
+          <button type="button" id="share-whatsapp-btn" class="btn" style="background:#25d366;display:none">💬 Share to WhatsApp</button>
+        </div>
+
+        <div id="drive-folder-section" style="margin-top:0.75rem;padding:0.75rem;background:#f5f5f5;border-radius:4px;display:none">
+          <div class="small" style="margin-bottom:0.5rem;font-weight:600">Google Drive Folder</div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
+            <select id="folder-select" style="flex:1;min-width:200px">
+              <option value="">Root folder</option>
+            </select>
+            <button type="button" id="refresh-folders-btn" class="btn" style="background:#666;padding:0.4rem 0.8rem;font-size:0.85rem">🔄 Refresh</button>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+            <input id="new-folder-name" type="text" placeholder="New folder name..." style="flex:1;min-width:150px" />
+            <button type="button" id="create-folder-btn" class="btn" style="background:#059669;padding:0.4rem 0.8rem;font-size:0.85rem">➕ Create Folder</button>
+          </div>
+          <div id="folder-status" class="small" style="margin-top:0.5rem;color:#666"></div>
+        </div>
+
         <div style="margin-top:0.75rem">
           <div class="previews-row">
             <div style="flex:1 1 520px">
@@ -59,11 +84,6 @@
             </div>
           </div>
         </div>
-
-        <div style="margin-top:0.6rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
-          <a id="merged-download" class="download-link" style="display:none" download="merged.pdf">Download merged PDF</a>
-          <button type="button" id="upload-to-drive-btn" class="btn" style="background:#1e88e5;display:none">📤 Upload to Drive</button>
-        </div>
       </div>
 
 {% endblock %}
@@ -77,6 +97,12 @@
       const mergedDownload = document.getElementById('merged-download');
       const mergeButton = document.getElementById('merge-button');
       const mergeForm = document.getElementById('merge-form');
+      const driveFolderSection = document.getElementById('drive-folder-section');
+      const folderSelect = document.getElementById('folder-select');
+      const refreshFoldersBtn = document.getElementById('refresh-folders-btn');
+      const newFolderNameInput = document.getElementById('new-folder-name');
+      const createFolderBtn = document.getElementById('create-folder-btn');
+      const folderStatus = document.getElementById('folder-status');
 
       // store selected files and per-file metadata (order matters)
       let selectedFilesArray = [];
@@ -276,8 +302,16 @@
           mergedPreview.src = url + '#zoom=' + zoom;
           mergedPreview.style.display = '';
           mergedDownload.href = url;
+          // Update download filename from the form input
+          const customFilename = document.getElementById('output-filename').value.trim();
+          if (customFilename) {
+            mergedDownload.download = customFilename.endsWith('.pdf') ? customFilename : customFilename + '.pdf';
+          } else {
+            mergedDownload.download = 'merged.pdf';
+          }
           mergedDownload.style.display = '';
           uploadToDriveBtn.style.display = '';
+          document.getElementById('share-whatsapp-btn').style.display = '';
         } catch (err) {
           alert('Error: ' + err.message);
         } finally {
@@ -317,6 +351,74 @@
         });
       });
 
+      // Google Drive folder management functions
+      async function loadFolders() {
+        try {
+          const resp = await fetch('/drive/folders');
+          const result = await resp.json();
+          if (result.folders) {
+            folderSelect.innerHTML = '<option value="">Root folder</option>';
+            result.folders.forEach(folder => {
+              const option = document.createElement('option');
+              option.value = folder.id;
+              option.textContent = folder.name;
+              folderSelect.appendChild(option);
+            });
+            folderStatus.textContent = `${result.folders.length} folders loaded`;
+          }
+        } catch (err) {
+          folderStatus.textContent = '❌ Failed to load folders';
+        }
+      }
+
+      refreshFoldersBtn.addEventListener('click', async () => {
+        refreshFoldersBtn.disabled = true;
+        refreshFoldersBtn.textContent = '🔄 Loading...';
+        await loadFolders();
+        refreshFoldersBtn.disabled = false;
+        refreshFoldersBtn.textContent = '🔄 Refresh';
+      });
+
+      createFolderBtn.addEventListener('click', async () => {
+        const folderName = newFolderNameInput.value.trim();
+        if (!folderName) {
+          alert('Please enter a folder name');
+          return;
+        }
+
+        createFolderBtn.disabled = true;
+        createFolderBtn.textContent = '⏳ Creating...';
+        folderStatus.textContent = 'Creating folder...';
+
+        try {
+          const resp = await fetch('/drive/create-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ folder_name: folderName })
+          });
+          const result = await resp.json();
+          
+          if (result.error) {
+            throw new Error(result.error);
+          }
+
+          // Add new folder to dropdown
+          const option = document.createElement('option');
+          option.value = result.folder_id;
+          option.textContent = result.folder_name;
+          folderSelect.appendChild(option);
+          folderSelect.value = result.folder_id;
+          
+          newFolderNameInput.value = '';
+          folderStatus.textContent = `✓ Folder "${result.folder_name}" created!`;
+        } catch (err) {
+          folderStatus.textContent = `❌ ${err.message}`;
+        } finally {
+          createFolderBtn.disabled = false;
+          createFolderBtn.textContent = '➕ Create Folder';
+        }
+      });
+
       // Upload to Drive functionality
       const uploadToDriveBtn = document.getElementById('upload-to-drive-btn');
       let mergedBlob = null;
@@ -331,9 +433,23 @@
         uploadToDriveBtn.textContent = '📤 Uploading...';
         
         try {
+          // Use custom filename from the input, or default to merged.pdf
+          let driveFilename = document.getElementById('output-filename').value.trim();
+          if (!driveFilename) {
+            driveFilename = 'merged.pdf';
+          } else if (!driveFilename.toLowerCase().endsWith('.pdf')) {
+            driveFilename += '.pdf';
+          }
+          
           const fd = new FormData();
-          fd.append('file', mergedBlob, 'merged.pdf');
-          fd.append('filename', 'merged.pdf');
+          fd.append('file', mergedBlob, driveFilename);
+          fd.append('filename', driveFilename);
+          
+          // Add folder ID if selected
+          const folderId = folderSelect.value;
+          if (folderId) {
+            fd.append('folder_id', folderId);
+          }
           
           const resp = await fetch('/drive/upload', { method: 'POST', body: fd });
           const result = await resp.json();
@@ -351,8 +467,59 @@
         }
       });
 
+      // Show folder section when upload button appears
+      const observer = new MutationObserver(() => {
+        if (uploadToDriveBtn.style.display !== 'none' && driveFolderSection.style.display === 'none') {
+          driveFolderSection.style.display = '';
+          loadFolders();
+        }
+      });
+      observer.observe(uploadToDriveBtn, { attributes: true });
+
+      // WhatsApp share functionality
+      const shareWhatsAppBtn = document.getElementById('share-whatsapp-btn');
+      
+      shareWhatsAppBtn.addEventListener('click', async () => {
+        const downloadLink = document.getElementById('merged-download');
+        if (!downloadLink.href || downloadLink.href === '#') {
+          alert('No merged PDF available. Please merge PDFs first.');
+          return;
+        }
+
+        try {
+          // Get the PDF blob from the download link
+          const response = await fetch(downloadLink.href);
+          const blob = await response.blob();
+          
+          // Get custom filename or use default
+          const filenameInput = document.getElementById('output-filename');
+          let filename = (filenameInput && filenameInput.value.trim()) || 'merged.pdf';
+          if (!filename.toLowerCase().endsWith('.pdf')) {
+            filename += '.pdf';
+          }
+          
+          const file = new File([blob], filename, { type: 'application/pdf' });
+
+          // Check if Web Share API is supported
+          if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              files: [file],
+              title: 'Merged PDF',
+              text: 'Sharing merged PDF file'
+            });
+          } else {
+            // Fallback: show instructions
+            alert('Web Share is not supported on this browser.\\n\\nTo share via WhatsApp:\\n1. Download the PDF using the Download button\\n2. Open WhatsApp\\n3. Attach the downloaded file');
+          }
+        } catch (err) {
+          if (err.name !== 'AbortError') {
+            console.error('Share error:', err);
+            alert('Failed to share: ' + err.message);
+          }
+        }
+      });
+
       // initial state
       renderSelectedList();
-    </script>
     </script>
 {% endblock %}

@@ -1,0 +1,716 @@
+{% extends "base.html" %}
+{% block title %}Edit & Sign PDFs{% endblock %}
+{% block content %}
+  <div class="app-header">
+    <div>
+      <h1>Edit & Sign PDFs</h1>
+      <div class="app-sub">Upload a PDF, add signatures, text annotations, and download the edited file.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="edit-form" enctype="multipart/form-data">
+      <div class="input-row">
+        <label class="small">PDF File</label>
+        <input id="edit-file-input" type="file" name="file" accept="application/pdf" style="display:none" />
+        <button type="button" id="edit-add-file" class="btn" style="background:#059669">+ Add file</button>
+        <div id="edit-file-name" class="small" aria-live="polite"></div>
+
+        <label class="small" style="margin-top:0.75rem;font-weight:600">Signature</label>
+        <div style="display:flex;gap:0.5rem;margin-bottom:0.5rem">
+          <button type="button" id="draw-signature-tab" class="btn" style="background:#059669;padding:0.4rem 0.8rem;font-size:0.85rem">✏️ Draw</button>
+          <button type="button" id="upload-signature-tab" class="btn" style="background:#666;padding:0.4rem 0.8rem;font-size:0.85rem">📤 Upload</button>
+        </div>
+        <div id="draw-signature-section">
+          <div style="border:2px solid #ddd;border-radius:4px;margin:0.5rem 0;background:#fff">
+            <canvas id="signature-canvas" width="400" height="150" style="display:block;border-radius:4px;cursor:crosshair;background:#fafafa;"></canvas>
+          </div>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem">
+            <button type="button" id="clear-signature-btn" class="btn" style="background:#dc3545;padding:0.4rem 0.8rem;font-size:0.85rem">🗑 Clear</button>
+          </div>
+        </div>
+        <div id="upload-signature-section" style="display:none">
+          <input id="signature-upload-input" type="file" accept="image/png,image/jpeg,image/jpg" style="display:none" />
+          <button type="button" id="upload-signature-btn" class="btn" style="background:#059669;padding:0.4rem 0.8rem;font-size:0.85rem">📁 Choose Signature Image</button>
+          <div id="uploaded-signature-preview" style="margin-top:0.5rem;display:none">
+            <img id="uploaded-signature-img" style="max-width:400px;max-height:150px;border:2px solid #ddd;border-radius:4px;background:repeating-conic-gradient(#f0f0f0 0% 25%, #fff 0% 50%) 50% / 20px 20px;" />
+            <div class="small" style="margin-top:0.25rem;color:#666">Preview (checkered background shows transparency)</div>
+          </div>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;margin-top:0.5rem">
+          <button type="button" id="add-signature-btn" class="btn" style="background:#059669;padding:0.4rem 0.8rem;font-size:0.85rem">✓ Add Signature</button>
+        </div>
+        <div style="margin-bottom:0.5rem">
+          <label class="small" style="font-weight:600">Date to Display:</label>
+          <input type="date" id="sig-date" style="padding:0.4rem;border:1px solid #ddd;border-radius:4px;font-size:0.9rem" />
+          <span class="small" style="color:#666;margin-left:0.5rem">Format: DD-MMM-YYYY</span>
+        </div>
+        <label class="small" style="margin-top:0.5rem">Signature Position & Size</label>
+        <div style="border:2px solid #ddd;border-radius:4px;margin:0.5rem 0;background:#fff;position:relative;width:100%;max-width:400px;aspect-ratio:8/3">
+          <canvas id="preview-canvas" width="400" height="150" style="display:block;border-radius:4px;width:100%;height:auto;background:#f0f0f0;cursor:crosshair"></canvas>
+          <div id="position-guide" style="position:absolute;border:2px dashed #ff6b6b;background:rgba(255,107,107,0.1);pointer-events:none;display:none"></div>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;padding:0.5rem;background:#f9f9f9;border-radius:4px;font-size:0.9rem">
+          <label>Page: <input id="sig-page-num" type="number" value="1" min="1" style="width:4rem"></label>
+          <label>X: <input id="sig-x" type="number" value="50" min="0" style="width:4rem"></label>
+          <label>Y: <input id="sig-y" type="number" value="50" min="0" style="width:4rem"></label>
+          <label>Width: <input id="sig-width" type="number" value="100" min="20" style="width:4rem"></label>
+          <label>Height: <input id="sig-height" type="number" value="50" min="20" style="width:4rem"></label>
+        </div>
+
+        <label class="small" style="margin-top:0.75rem;font-weight:600">Text Annotation</label>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
+          <input id="text-content" type="text" placeholder="Enter text to add..." style="flex:1;min-width:200px" />
+          <button type="button" id="add-text-btn" class="btn" style="background:#059669;padding:0.4rem 0.8rem;font-size:0.85rem">➕ Add Text</button>
+        </div>
+        <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;padding:0.5rem;background:#f9f9f9;border-radius:4px;font-size:0.9rem">
+          <label>Page: <input id="text-page-num" type="number" value="1" min="1" style="width:4rem"></label>
+          <label>X: <input id="text-x" type="number" value="50" min="0" style="width:4rem"></label>
+          <label>Y: <input id="text-y" type="number" value="50" min="0" style="width:4rem"></label>
+          <label>Size: <input id="text-size" type="number" value="12" min="8" max="48" style="width:4rem"></label>
+        </div>
+
+        <div style="margin-top:0.75rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+          <a id="edit-download" class="download-link" style="display:none">Download edited PDF</a>
+          <button type="button" id="upload-to-drive-btn" class="btn" style="background:#1e88e5;display:none">📤 Upload to Drive</button>
+          <button type="button" id="share-whatsapp-btn" class="btn" style="background:#25d366;display:none">💬 Share to WhatsApp</button>
+          <div class="small" id="edit-status" style="color:#666"></div>
+        </div>
+
+        <div id="drive-folder-section" style="margin-top:0.75rem;padding:0.75rem;background:#f5f5f5;border-radius:4px;display:none">
+          <div style="margin-bottom:0.5rem">
+            <label class="small" style="font-weight:600">Output Filename (optional)</label>
+            <input id="output-filename" type="text" placeholder="edited.pdf" style="width:100%;max-width:300px;margin-top:0.25rem" />
+            <div class="small" style="color:#666;margin-top:0.25rem">Leave blank for default name. Extension .pdf will be added automatically if missing.</div>
+          </div>
+          <div class="small" style="margin-bottom:0.5rem;font-weight:600">Google Drive Folder</div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;margin-bottom:0.5rem">
+            <select id="folder-select" style="flex:1;min-width:200px">
+              <option value="">Root folder</option>
+            </select>
+            <button type="button" id="refresh-folders-btn" class="btn" style="background:#666;padding:0.4rem 0.8rem;font-size:0.85rem">🔄 Refresh</button>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+            <input id="new-folder-name" type="text" placeholder="New folder name..." style="flex:1;min-width:150px" />
+            <button type="button" id="create-folder-btn" class="btn" style="background:#059669;padding:0.4rem 0.8rem;font-size:0.85rem">➕ Create Folder</button>
+          </div>
+          <div id="folder-status" class="small" style="margin-top:0.5rem;color:#666"></div>
+        </div>
+      </div>
+    </form>
+
+    <div style="margin-top:1rem">
+      <div class="preview-title">PDF Preview</div>
+      <div class="preview-frames preview" aria-label="PDF preview" style="height:500px;overflow:auto">
+        <iframe id="edit-preview" style="display:none;width:100%;height:100%;border:none" title="PDF preview" aria-label="PDF preview"></iframe>
+        <div id="preview-placeholder" style="display:flex;align-items:center;justify-content:center;height:100%;color:#999;font-size:1.1rem">
+          Upload a PDF to see preview
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const fileInput = document.getElementById('edit-file-input');
+  const addFileBtn = document.getElementById('edit-add-file');
+  const fileNameEl = document.getElementById('edit-file-name');
+  const signatureCanvas = document.getElementById('signature-canvas');
+  const previewCanvas = document.getElementById('preview-canvas');
+  const positionGuide = document.getElementById('position-guide');
+  const clearSigBtn = document.getElementById('clear-signature-btn');
+  const addSigBtn = document.getElementById('add-signature-btn');
+  const addTextBtn = document.getElementById('add-text-btn');
+  const editPreview = document.getElementById('edit-preview');
+  const previewPlaceholder = document.getElementById('preview-placeholder');
+  const editDownload = document.getElementById('edit-download');
+  const editStatus = document.getElementById('edit-status');
+  
+  const drawSignatureTab = document.getElementById('draw-signature-tab');
+  const uploadSignatureTab = document.getElementById('upload-signature-tab');
+  const drawSignatureSection = document.getElementById('draw-signature-section');
+  const uploadSignatureSection = document.getElementById('upload-signature-section');
+  const signatureUploadInput = document.getElementById('signature-upload-input');
+  const uploadSignatureBtn = document.getElementById('upload-signature-btn');
+  const uploadedSignaturePreview = document.getElementById('uploaded-signature-preview');
+  const uploadedSignatureImg = document.getElementById('uploaded-signature-img');
+  
+  let currentPdfFile = null;
+  let uploadedSignatureData = null;
+  let isDrawing = false;
+  const ctx = signatureCanvas.getContext('2d');
+  const previewCtx = previewCanvas.getContext('2d');
+  
+  // Initialize date input with today's date
+  const sigDateInput = document.getElementById('sig-date');
+  const today = new Date();
+  sigDateInput.value = today.toISOString().split('T')[0];
+  
+  // Set canvas backgrounds
+  ctx.fillStyle = '#fafafa';
+  ctx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+  previewCtx.fillStyle = '#f0f0f0';
+  previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+  
+  // Function to draw position preview
+  function updatePositionPreview() {
+    const x = parseFloat(document.getElementById('sig-x').value) || 0;
+    const y = parseFloat(document.getElementById('sig-y').value) || 0;
+    const width = parseFloat(document.getElementById('sig-width').value) || 100;
+    const height = parseFloat(document.getElementById('sig-height').value) || 50;
+    
+    // Scale from PDF coordinates (usually 0-600) to canvas (400x150)
+    const scaleX = previewCanvas.width / 600;
+    const scaleY = previewCanvas.height / 850;
+    
+    const canvasX = x * scaleX;
+    const canvasY = y * scaleY;
+    const canvasW = width * scaleX;
+    const canvasH = height * scaleY;
+    
+    // Update position guide
+    positionGuide.style.left = canvasX + 'px';
+    positionGuide.style.top = canvasY + 'px';
+    positionGuide.style.width = canvasW + 'px';
+    positionGuide.style.height = canvasH + 'px';
+    positionGuide.style.display = '';
+    
+    // Redraw preview canvas
+    previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+    previewCtx.fillStyle = '#f0f0f0';
+    previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+    
+    // Draw grid lines
+    previewCtx.strokeStyle = '#e0e0e0';
+    previewCtx.lineWidth = 1;
+    for (let i = 0; i <= previewCanvas.width; i += 50) {
+      previewCtx.beginPath();
+      previewCtx.moveTo(i, 0);
+      previewCtx.lineTo(i, previewCanvas.height);
+      previewCtx.stroke();
+    }
+    for (let i = 0; i <= previewCanvas.height; i += 50) {
+      previewCtx.beginPath();
+      previewCtx.moveTo(0, i);
+      previewCtx.lineTo(previewCanvas.width, i);
+      previewCtx.stroke();
+    }
+    
+    // Draw position indicator
+    previewCtx.fillStyle = 'rgba(255, 107, 107, 0.2)';
+    previewCtx.fillRect(canvasX, canvasY, canvasW, canvasH);
+    previewCtx.strokeStyle = '#ff6b6b';
+    previewCtx.lineWidth = 2;
+    previewCtx.strokeRect(canvasX, canvasY, canvasW, canvasH);
+    
+    // Draw center point
+    previewCtx.fillStyle = '#ff6b6b';
+    previewCtx.beginPath();
+    previewCtx.arc(canvasX + canvasW / 2, canvasY + canvasH / 2, 4, 0, Math.PI * 2);
+    previewCtx.fill();
+  }
+  
+  // Add position input change listeners
+  ['sig-x', 'sig-y', 'sig-width', 'sig-height'].forEach(id => {
+    document.getElementById(id).addEventListener('change', updatePositionPreview);
+    document.getElementById(id).addEventListener('input', updatePositionPreview);
+  });
+  
+  // Allow dragging the position box on preview canvas
+  let isDraggingPreview = false;
+  let dragStartX, dragStartY;
+  
+  previewCanvas.addEventListener('mousedown', (e) => {
+    const rect = previewCanvas.getBoundingClientRect();
+    const canvasX = e.clientX - rect.left;
+    const canvasY = e.clientY - rect.top;
+    
+    const x = parseFloat(document.getElementById('sig-x').value) || 0;
+    const y = parseFloat(document.getElementById('sig-y').value) || 0;
+    const width = parseFloat(document.getElementById('sig-width').value) || 100;
+    const height = parseFloat(document.getElementById('sig-height').value) || 50;
+    
+    const scaleX = previewCanvas.width / 600;
+    const scaleY = previewCanvas.height / 850;
+    
+    const boxX = x * scaleX;
+    const boxY = y * scaleY;
+    const boxW = width * scaleX;
+    const boxH = height * scaleY;
+    
+    // Check if click is inside the position box
+    if (canvasX >= boxX && canvasX <= boxX + boxW && canvasY >= boxY && canvasY <= boxY + boxH) {
+      isDraggingPreview = true;
+      dragStartX = canvasX - boxX;
+      dragStartY = canvasY - boxY;
+    }
+  });
+  
+  previewCanvas.addEventListener('mousemove', (e) => {
+    if (!isDraggingPreview) return;
+    const rect = previewCanvas.getBoundingClientRect();
+    const canvasX = e.clientX - rect.left;
+    const canvasY = e.clientY - rect.top;
+    
+    const scaleX = 600 / previewCanvas.width;
+    const scaleY = 850 / previewCanvas.height;
+    
+    const newX = (canvasX - dragStartX) * scaleX;
+    const newY = (canvasY - dragStartY) * scaleY;
+    
+    document.getElementById('sig-x').value = Math.max(0, Math.round(newX));
+    document.getElementById('sig-y').value = Math.max(0, Math.round(newY));
+    updatePositionPreview();
+  });
+  
+  previewCanvas.addEventListener('mouseup', () => {
+    isDraggingPreview = false;
+  });
+  
+  previewCanvas.addEventListener('mouseleave', () => {
+    isDraggingPreview = false;
+  });
+  
+  addFileBtn.addEventListener('click', () => fileInput.click());
+  
+  fileInput.addEventListener('change', (e) => {
+    const f = e.target.files[0];
+    if (f && f.type === 'application/pdf') {
+      currentPdfFile = f;
+      fileNameEl.textContent = `Uploading: ${f.name}...`;
+      editStatus.textContent = 'Storing PDF...';
+      
+      // Store PDF on server first to avoid large request payloads
+      const fd = new FormData();
+      fd.append('file', f);
+      
+      fetch('/edit/store-pdf', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            fileNameEl.textContent = `Selected: ${f.name}`;
+            const url = URL.createObjectURL(f);
+            editPreview.src = url;
+            editPreview.style.display = '';
+            previewPlaceholder.style.display = 'none';
+            editStatus.textContent = `✓ PDF stored (${(data.size / 1024).toFixed(1)} KB)`;
+            editDownload.style.display = 'none';
+          } else {
+            fileNameEl.textContent = 'Error storing PDF';
+            editStatus.textContent = `❌ ${data.error}`;
+          }
+        })
+        .catch(err => {
+          fileNameEl.textContent = 'Error storing PDF';
+          editStatus.textContent = `❌ ${err.message}`;
+        });
+    } else {
+      fileNameEl.textContent = 'Please select a PDF file';
+      currentPdfFile = null;
+    }
+  });
+  
+  // Signature canvas drawing
+  signatureCanvas.addEventListener('mousedown', () => {
+    isDrawing = true;
+  });
+  
+  signatureCanvas.addEventListener('mousemove', (e) => {
+    if (!isDrawing) return;
+    const rect = signatureCanvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    ctx.lineTo(x, y);
+    ctx.stroke();
+  });
+  
+  signatureCanvas.addEventListener('mouseup', () => {
+    isDrawing = false;
+  });
+  
+  signatureCanvas.addEventListener('mouseout', () => {
+    isDrawing = false;
+  });
+  
+  // Initialize signature drawing
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  
+  // Initialize position preview
+  updatePositionPreview();
+  
+  // Tab switching between Draw and Upload signature
+  drawSignatureTab.addEventListener('click', () => {
+    drawSignatureTab.style.background = '#059669';
+    uploadSignatureTab.style.background = '#666';
+    drawSignatureSection.style.display = '';
+    uploadSignatureSection.style.display = 'none';
+    uploadedSignatureData = null;
+  });
+  
+  uploadSignatureTab.addEventListener('click', () => {
+    uploadSignatureTab.style.background = '#059669';
+    drawSignatureTab.style.background = '#666';
+    uploadSignatureSection.style.display = '';
+    drawSignatureSection.style.display = 'none';
+  });
+  
+  // Handle signature image upload
+  uploadSignatureBtn.addEventListener('click', () => signatureUploadInput.click());
+  
+  signatureUploadInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file && file.type.match(/image\/(png|jpeg|jpg)/)) {
+      // Upload signature file to server instead of converting to base64
+      const fd = new FormData();
+      fd.append('file', file);
+      
+      fetch('/edit/store-signature', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+          if (data.success) {
+            // Show preview with FileReader for display only
+            const reader = new FileReader();
+            reader.onload = (event) => {
+              uploadedSignatureImg.src = event.target.result;
+              uploadedSignaturePreview.style.display = '';
+              uploadedSignatureData = true;  // Just a flag, not the actual data
+            };
+            reader.readAsDataURL(file);
+            editStatus.textContent = `✓ Signature uploaded (${(data.size / 1024).toFixed(1)} KB)`;
+          } else {
+            alert(`Error: ${data.error}`);
+          }
+        })
+        .catch(err => alert(`Upload failed: ${err.message}`));
+    } else {
+      alert('Please select a PNG or JPEG image file');
+    }
+  });
+  
+  clearSigBtn.addEventListener('click', () => {
+    ctx.clearRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+    ctx.fillStyle = '#fafafa';
+    ctx.fillRect(0, 0, signatureCanvas.width, signatureCanvas.height);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+  });
+  
+  addSigBtn.addEventListener('click', async () => {
+    if (!currentPdfFile) {
+      alert('Please upload a PDF first');
+      return;
+    }
+    
+    // Determine which signature to use (drawn or uploaded)
+    let signatureData;
+    if (uploadSignatureSection.style.display === 'none') {
+      // Using drawn signature
+      signatureData = signatureCanvas.toDataURL('image/png');
+      // Check if canvas is blank (empty 1x1 transparent pixel)
+      const blankCanvas = document.createElement('canvas');
+      blankCanvas.width = signatureCanvas.width;
+      blankCanvas.height = signatureCanvas.height;
+      const blankCtx = blankCanvas.getContext('2d');
+      blankCtx.fillStyle = '#fafafa';
+      blankCtx.fillRect(0, 0, blankCanvas.width, blankCanvas.height);
+      if (signatureData === blankCanvas.toDataURL('image/png')) {
+        alert('Please draw a signature first');
+        return;
+      }
+    } else {
+      // Using uploaded signature
+      if (!uploadedSignatureData) {
+        alert('Please upload a signature image first');
+        return;
+      }
+      signatureData = uploadedSignatureData;
+    }
+    
+    addSigBtn.disabled = true;
+    addSigBtn.textContent = '⏳ Adding...';
+    editStatus.textContent = 'Adding signature...';
+    
+    try {
+      const fd = new FormData();
+      
+      // Determine which signature to use (drawn or uploaded)
+      if (uploadSignatureSection.style.display === 'none') {
+        // Using drawn signature
+        const signatureData = signatureCanvas.toDataURL('image/png');
+        // Check if canvas is blank
+        const blankCanvas = document.createElement('canvas');
+        blankCanvas.width = signatureCanvas.width;
+        blankCanvas.height = signatureCanvas.height;
+        const blankCtx = blankCanvas.getContext('2d');
+        blankCtx.fillStyle = '#fafafa';
+        blankCtx.fillRect(0, 0, blankCanvas.width, blankCanvas.height);
+        if (signatureData === blankCanvas.toDataURL('image/png')) {
+          alert('Please draw a signature first');
+          addSigBtn.disabled = false;
+          addSigBtn.textContent = '✓ Add Signature';
+          return;
+        }
+        fd.append('signature_data', signatureData);
+        fd.append('signature_source', 'draw');
+      } else {
+        // Using uploaded signature
+        if (!uploadedSignatureData) {
+          alert('Please upload a signature image first');
+          addSigBtn.disabled = false;
+          addSigBtn.textContent = '✓ Add Signature';
+          return;
+        }
+        fd.append('signature_source', 'upload');
+      }
+      
+      // Add common parameters
+      fd.append('page_num', document.getElementById('sig-page-num').value);
+      fd.append('x', document.getElementById('sig-x').value);
+      fd.append('y', document.getElementById('sig-y').value);
+      fd.append('width', document.getElementById('sig-width').value);
+      fd.append('height', document.getElementById('sig-height').value);
+      fd.append('signature_date', document.getElementById('sig-date').value);
+      
+      const resp = await fetch('/edit/add-signature', { method: 'POST', body: fd });
+      if (!resp.ok) throw new Error('Server returned ' + resp.status);
+      
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      editDownload.href = url;
+      editDownload.download = 'signed.pdf';
+      editDownload.style.display = '';
+      uploadToDriveBtn.style.display = '';
+      shareWhatsAppBtn.style.display = '';
+      editStatus.textContent = '✓ Signature added! Ready to download.';
+      
+      // Update preview
+      editPreview.src = url;
+    } catch (err) {
+      alert('Error: ' + err.message);
+      editStatus.textContent = '❌ Failed to add signature';
+    } finally {
+      addSigBtn.disabled = false;
+      addSigBtn.textContent = '✓ Add Signature';
+    }
+  });
+  
+  addTextBtn.addEventListener('click', async () => {
+    if (!currentPdfFile) {
+      alert('Please upload a PDF first');
+      return;
+    }
+    
+    const textContent = document.getElementById('text-content').value.trim();
+    if (!textContent) {
+      alert('Please enter text');
+      return;
+    }
+    
+    addTextBtn.disabled = true;
+    addTextBtn.textContent = '⏳ Adding...';
+    editStatus.textContent = 'Adding text...';
+    
+    try {
+      const fd = new FormData();
+      fd.append('file', currentPdfFile);
+      fd.append('text', textContent);
+      fd.append('page_num', document.getElementById('text-page-num').value);
+      fd.append('x', document.getElementById('text-x').value);
+      fd.append('y', document.getElementById('text-y').value);
+      fd.append('font_size', document.getElementById('text-size').value);
+      
+      const resp = await fetch('/edit/add-text', { method: 'POST', body: fd });
+      if (!resp.ok) throw new Error('Server returned ' + resp.status);
+      
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      editDownload.href = url;
+      editDownload.download = 'annotated.pdf';
+      editDownload.style.display = '';
+      uploadToDriveBtn.style.display = '';
+      shareWhatsAppBtn.style.display = '';
+      editStatus.textContent = '✓ Text added! Ready to download.';
+      
+      // Update preview
+      editPreview.src = url;
+      document.getElementById('text-content').value = '';
+    } catch (err) {
+      alert('Error: ' + err.message);
+      editStatus.textContent = '❌ Failed to add text';
+    } finally {
+      addTextBtn.disabled = false;
+      addTextBtn.textContent = '➕ Add Text';
+    }
+  });
+
+  // Google Drive folder management
+  const uploadToDriveBtn = document.getElementById('upload-to-drive-btn');
+  const driveFolderSection = document.getElementById('drive-folder-section');
+  const folderSelect = document.getElementById('folder-select');
+  const refreshFoldersBtn = document.getElementById('refresh-folders-btn');
+  const createFolderBtn = document.getElementById('create-folder-btn');
+  const newFolderNameInput = document.getElementById('new-folder-name');
+  const folderStatus = document.getElementById('folder-status');
+
+  // Show folder section when upload button appears
+  const observer = new MutationObserver(() => {
+    if (uploadToDriveBtn.style.display !== 'none') {
+      driveFolderSection.style.display = '';
+      loadFolders();
+    }
+  });
+  observer.observe(uploadToDriveBtn, { attributes: true, attributeFilter: ['style'] });
+
+  async function loadFolders() {
+    try {
+      const resp = await fetch('/drive/folders');
+      const data = await resp.json();
+      if (data.success) {
+        folderSelect.innerHTML = '<option value="">Root folder</option>';
+        data.folders.forEach(folder => {
+          const opt = document.createElement('option');
+          opt.value = folder.id;
+          opt.textContent = folder.name;
+          folderSelect.appendChild(opt);
+        });
+        folderStatus.textContent = `✓ ${data.folders.length} folders loaded`;
+      } else {
+        folderStatus.textContent = `❌ ${data.error}`;
+      }
+    } catch (err) {
+      folderStatus.textContent = `❌ ${err.message}`;
+    }
+  }
+
+  refreshFoldersBtn.addEventListener('click', loadFolders);
+
+  createFolderBtn.addEventListener('click', async () => {
+    const folderName = newFolderNameInput.value.trim();
+    if (!folderName) {
+      alert('Please enter a folder name');
+      return;
+    }
+
+    createFolderBtn.disabled = true;
+    folderStatus.textContent = 'Creating folder...';
+
+    try {
+      const resp = await fetch('/drive/create-folder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: folderName })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        folderStatus.textContent = `✓ Folder "${folderName}" created`;
+        newFolderNameInput.value = '';
+        await loadFolders();
+        folderSelect.value = data.folder.id;
+      } else {
+        folderStatus.textContent = `❌ ${data.error}`;
+      }
+    } catch (err) {
+      folderStatus.textContent = `❌ ${err.message}`;
+    } finally {
+      createFolderBtn.disabled = false;
+    }
+  });
+
+  uploadToDriveBtn.addEventListener('click', async () => {
+    const downloadLink = editDownload.href;
+    if (!downloadLink || downloadLink === '#') {
+      alert('No edited PDF available. Please add signature or text first.');
+      return;
+    }
+
+    uploadToDriveBtn.disabled = true;
+    uploadToDriveBtn.textContent = '⏳ Uploading...';
+    folderStatus.textContent = 'Uploading to Google Drive...';
+
+    try {
+      const blob = await fetch(downloadLink).then(r => r.blob());
+      const fd = new FormData();
+      
+      // Get custom filename or use default
+      let filename = document.getElementById('output-filename').value.trim() || 'edited.pdf';
+      if (!filename.toLowerCase().endsWith('.pdf')) {
+        filename += '.pdf';
+      }
+      
+      fd.append('file', blob, filename);
+      fd.append('filename', filename);
+      
+      const folderId = folderSelect.value;
+      if (folderId) {
+        fd.append('folder_id', folderId);
+      }
+
+      const resp = await fetch('/drive/upload', { method: 'POST', body: fd });
+      const data = await resp.json();
+      
+      if (data.success) {
+        folderStatus.textContent = `✓ Uploaded to Drive: ${data.name}`;
+        alert(`Successfully uploaded to Google Drive!\nFile: ${data.name}`);
+      } else {
+        folderStatus.textContent = `❌ ${data.error}`;
+        alert(`Upload failed: ${data.error}`);
+      }
+    } catch (err) {
+      folderStatus.textContent = `❌ ${err.message}`;
+      alert(`Upload error: ${err.message}`);
+    } finally {
+      uploadToDriveBtn.disabled = false;
+      uploadToDriveBtn.textContent = '📤 Upload to Drive';
+    }
+  });
+
+  // WhatsApp share functionality
+  const shareWhatsAppBtn = document.getElementById('share-whatsapp-btn');
+  
+  shareWhatsAppBtn.addEventListener('click', async () => {
+    const downloadLink = editDownload.href;
+    if (!downloadLink || downloadLink === '#') {
+      alert('No edited PDF available. Please add signature or text first.');
+      return;
+    }
+
+    try {
+      // Get the PDF blob from the download link
+      const response = await fetch(downloadLink);
+      const blob = await response.blob();
+      
+      // Get custom filename or use default
+      const filenameInput = document.getElementById('output-filename');
+      let filename = (filenameInput && filenameInput.value.trim()) || 'edited.pdf';
+      if (!filename.toLowerCase().endsWith('.pdf')) {
+        filename += '.pdf';
+      }
+      
+      const file = new File([blob], filename, { type: 'application/pdf' });
+
+      // Check if Web Share API is supported
+      if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: 'Edited PDF',
+          text: 'Sharing edited PDF file'
+        });
+      } else {
+        // Fallback: show instructions
+        alert('Web Share is not supported on this browser.\\n\\nTo share via WhatsApp:\\n1. Download the PDF using the Download button\\n2. Open WhatsApp\\n3. Attach the downloaded file');
+      }
+    } catch (err) {
+      if (err.name !== 'AbortError') {
+        console.error('Share error:', err);
+        alert('Failed to share: ' + err.message);
+      }
+    }
+  });
+</script>
+{% endblock %}

@@ -14,6 +14,7 @@
         <nav class="site-nav">
           <a href="{{ url_for('index') }}" class="{% if request.path == url_for('index') %}active{% endif %}">Merge PDF</a>
           <a href="{{ url_for('compress_page') }}" class="{% if request.path == url_for('compress_page') %}active{% endif %}">Compress PDF</a>
+          <a href="{{ url_for('edit_page') }}" class="{% if request.path == url_for('edit_page') %}active{% endif %}">Edit & Sign</a>
           <a href="{{ url_for('drive_settings') }}" class="{% if request.path == url_for('drive_settings') %}active{% endif %}">Drive Settings</a>
         </nav>
       </div>
