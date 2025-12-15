@@ -1,0 +1,239 @@
+{% extends "base.html" %}
+{% block title %}Compress PDFs{% endblock %}
+{% block content %}
+  <div class="app-header">
+    <div>
+      <h1>Compress PDFs</h1>
+      <div class="app-sub">Upload a PDF, choose compression options, and preview the result.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <form id="compress-form" method="post" action="{{ url_for('compress') }}" enctype="multipart/form-data">
+      <div class="input-row">
+        <label class="small">PDF File</label>
+        <input id="compress-file-input" type="file" name="file" accept="application/pdf" style="display:none" />
+        <button type="button" id="compress-add-file" class="btn" style="background:#059669">+ Add file</button>
+        <div id="compress-file-name" class="small" aria-live="polite"></div>
+
+        <label class="small" style="margin-top:0.5rem">Algorithm</label>
+        <select id="algorithm" name="algorithm">
+          <option value="lossless">Lossless (compress content streams)</option>
+          <option value="optimize">Optimize (pikepdf: compress + object streams)</option>
+          <option value="downscale">Downscale images (Pillow + pikepdf)</option>
+        </select>
+
+        <div id="optimize-options" class="small" style="display:none">
+          <label><input type="checkbox" name="linearize" /> Linearize for web (fast first page)</label>
+        </div>
+
+        <div id="downscale-options" style="display:none">
+          <div class="small" style="margin-bottom:0.5rem">
+            <strong>Presets:</strong>
+            <button type="button" class="preset-btn" data-px="3000" data-quality="85">High (3000px, Q85)</button>
+            <button type="button" class="preset-btn" data-px="2000" data-quality="75">Medium (2000px, Q75)</button>
+            <button type="button" class="preset-btn" data-px="1200" data-quality="65">Small (1200px, Q65)</button>
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap" class="small">
+            <label>Max dimension (px): <input id="max-px-input" type="number" name="max_px" value="2000" min="300" max="6000" style="width:7rem"></label>
+            <label>JPEG quality: <input id="jpeg-quality-input" type="number" name="jpeg_quality" value="75" min="40" max="95" style="width:5rem"></label>
+            <span class="small">Images larger than Max dimension will be resized and re-encoded.</span>
+          </div>
+        </div>
+
+        <div class="controls">
+          <label><input type="checkbox" name="remove_metadata" /> Remove metadata</label>
+        </div>
+
+        <div style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
+          <button id="compress-button" class="btn" type="submit">Compress</button>
+          <a id="compressed-download" class="download-link" style="display:none" download="compressed.pdf">Download compressed PDF</a>
+          <button type="button" id="upload-to-drive-btn" class="btn" style="background:#1e88e5;display:none">📤 Upload to Drive</button>
+        </div>
+
+        <div id="size-stats" class="small" style="margin-top:0.25rem;display:none">
+          <span>Original: <strong id="size-original">—</strong></span>
+          <span style="margin-left:0.75rem">Compressed: <strong id="size-compressed">—</strong></span>
+          <span style="margin-left:0.75rem">Savings: <strong id="size-savings">—</strong></span>
+        </div>
+      </div>
+    </form>
+
+    <div style="margin-top:0.75rem">
+      <div class="previews-row">
+        <div style="flex:1 1 520px">
+          <div class="preview-title">Original preview <button type="button" class="zoom-toggle" data-target="original-preview" aria-pressed="false">🔍 Fit to width</button></div>
+          <div class="preview-frames preview" aria-label="Original PDF preview">
+            <iframe id="original-preview" style="display:none" title="Original PDF preview" aria-label="Original PDF preview" data-zoom="page-width"></iframe>
+          </div>
+        </div>
+        <div style="flex:1 1 520px">
+          <div class="preview-title">Compressed preview <button type="button" class="zoom-toggle" data-target="compressed-preview" aria-pressed="false">🔍 Fit to width</button></div>
+          <div class="preview-frames preview" aria-label="Compressed PDF preview">
+            <iframe id="compressed-preview" style="display:none" title="Compressed PDF preview" aria-label="Compressed PDF preview" data-zoom="page-width"></iframe>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const fileInput = document.getElementById('compress-file-input');
+  const addBtn = document.getElementById('compress-add-file');
+  const fileNameEl = document.getElementById('compress-file-name');
+  const form = document.getElementById('compress-form');
+  const compressBtn = document.getElementById('compress-button');
+  const downloadLink = document.getElementById('compressed-download');
+  const originalPreview = document.getElementById('original-preview');
+  const compressedPreview = document.getElementById('compressed-preview');
+  const sizeStats = document.getElementById('size-stats');
+  const sizeOriginal = document.getElementById('size-original');
+  const sizeCompressed = document.getElementById('size-compressed');
+  const sizeSavings = document.getElementById('size-savings');
+  const uploadToDriveBtn = document.getElementById('upload-to-drive-btn');
+  let originalBytes = null;
+  let compressedBlob = null;
+
+  addBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files && fileInput.files[0]){
+      const f = fileInput.files[0];
+      fileNameEl.textContent = `${f.name} (${(f.size/1024/1024).toFixed(2)} MB)`;
+      originalBytes = f.size;
+      sizeOriginal.textContent = (f.size/1024/1024).toFixed(2) + ' MB';
+      sizeCompressed.textContent = '—';
+      sizeSavings.textContent = '—';
+      sizeStats.style.display = '';
+      const url = URL.createObjectURL(f);
+      const zoom = originalPreview.dataset.zoom || 'page-width';
+      originalPreview.src = url + '#zoom=' + zoom;
+      originalPreview.style.display = '';
+    } else {
+      fileNameEl.textContent = '';
+      originalPreview.style.display = 'none';
+      originalBytes = null;
+      sizeStats.style.display = 'none';
+    }
+  });
+
+  function setPreviewZoom(iframeEl, mode){
+    iframeEl.dataset.zoom = mode;
+    if (iframeEl.src){
+      const base = iframeEl.src.split('#')[0];
+      iframeEl.src = base + '#zoom=' + mode;
+    }
+  }
+  function updateToggleButton(btn){
+    const target = document.getElementById(btn.dataset.target);
+    const mode = target.dataset.zoom || 'page-width';
+    if (mode === 'page-width'){
+      btn.textContent = '🔍 Fit to width';
+      btn.setAttribute('aria-pressed','false');
+    } else {
+      btn.textContent = '🔎 Actual size';
+      btn.setAttribute('aria-pressed','true');
+    }
+  }
+  document.querySelectorAll('.zoom-toggle').forEach(btn => {
+    updateToggleButton(btn);
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.target);
+      const next = (target.dataset.zoom === 'page-width') ? '100%' : 'page-width';
+      setPreviewZoom(target, next);
+      updateToggleButton(btn);
+    });
+  });
+
+  // toggle optimize options based on selected algorithm
+  const algoSelect = document.getElementById('algorithm');
+  const optimizeOptions = document.getElementById('optimize-options');
+  const downscaleOptions = document.getElementById('downscale-options');
+  const maxPxInput = document.getElementById('max-px-input');
+  const jpegQualityInput = document.getElementById('jpeg-quality-input');
+  
+  function updateAlgoOptions(){
+    optimizeOptions.style.display = (algoSelect.value === 'optimize') ? '' : 'none';
+    downscaleOptions.style.display = (algoSelect.value === 'downscale') ? '' : 'none';
+  }
+  algoSelect.addEventListener('change', updateAlgoOptions);
+  updateAlgoOptions();
+
+  // Preset button handlers
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      maxPxInput.value = btn.dataset.px;
+      jpegQualityInput.value = btn.dataset.quality;
+    });
+  });
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    if (!fileInput.files || !fileInput.files[0]){
+      alert('Please select a PDF file.');
+      return;
+    }
+    compressBtn.disabled = true; compressBtn.textContent = 'Compressing...';
+    downloadLink.style.display = 'none'; compressedPreview.style.display = 'none';
+    try{
+      const fd = new FormData(form);
+      const resp = await fetch(form.action, { method: 'POST', body: fd });
+      if (!resp.ok) throw new Error('Server returned ' + resp.status);
+      const blob = await resp.blob();
+      compressedBlob = blob;
+      const url = URL.createObjectURL(blob);
+      const zoom = compressedPreview.dataset.zoom || 'page-width';
+      compressedPreview.src = url + '#zoom=' + zoom;
+      compressedPreview.style.display = '';
+      downloadLink.href = url; downloadLink.style.display = '';
+      uploadToDriveBtn.style.display = '';
+      // update sizes
+      const compBytes = blob.size;
+      sizeCompressed.textContent = (compBytes/1024/1024).toFixed(2) + ' MB';
+      if (originalBytes && originalBytes > 0){
+        const savings = (1 - compBytes / originalBytes) * 100;
+        const sign = savings > 0 ? '' : '';
+        sizeSavings.textContent = savings.toFixed(1) + '%';
+      } else {
+        sizeSavings.textContent = '—';
+      }
+    } catch (err){
+      alert('Error: ' + err.message);
+    } finally {
+      compressBtn.disabled = false; compressBtn.textContent = 'Compress';
+    }
+  });
+
+  // Upload to Drive functionality
+  uploadToDriveBtn.addEventListener('click', async () => {
+    if (!compressedBlob) {
+      alert('No compressed PDF available');
+      return;
+    }
+    
+    uploadToDriveBtn.disabled = true;
+    uploadToDriveBtn.textContent = '📤 Uploading...';
+    
+    try {
+      const fd = new FormData();
+      fd.append('file', compressedBlob, 'compressed.pdf');
+      fd.append('filename', 'compressed.pdf');
+      
+      const resp = await fetch('/drive/upload', { method: 'POST', body: fd });
+      const result = await resp.json();
+      
+      if (result.error) {
+        throw new Error(result.error);
+      }
+      
+      alert('✓ Uploaded to Google Drive successfully!\\nFile: ' + result.name);
+    } catch (err) {
+      alert('Upload failed: ' + err.message + '\\nMake sure you are connected to Google Drive in Settings.');
+    } finally {
+      uploadToDriveBtn.disabled = false;
+      uploadToDriveBtn.textContent = '📤 Upload to Drive';
+    }
+  });
+</script>
+{% endblock %}

@@ -32,6 +32,15 @@ def test_index_contains_ui_elements(client):
     assert 'id="selected-files"' in text
     assert 'id="selected-preview"' in text
     assert 'id="merged-preview"' in text
+    # visible labels for previews
+    assert 'Selected file preview' in text
+    assert 'Merged PDF preview' in text
+    # previews should be in a single parallel container
+    assert 'previews-row' in text
+    # preview iframes indicate that they should be zoomed to fit
+    assert 'data-zoom="page-width"' in text
+    # zoom toggle controls should be present and default to Fit to width
+    assert 'Fit to width' in text
     # ensure new stylesheet and modern header exist
     assert 'static/style.css' in text
     assert 'Merge PDFs' in text

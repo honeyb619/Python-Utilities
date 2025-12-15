@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{% block title %}Merge PDFs{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container site-header-inner">
+        <div class="brand">PDF Tools</div>
+        <nav class="site-nav">
+          <a href="{{ url_for('index') }}" class="{% if request.path == url_for('index') %}active{% endif %}">Merge PDF</a>
+          <a href="{{ url_for('compress_page') }}" class="{% if request.path == url_for('compress_page') %}active{% endif %}">Compress PDF</a>
+          <a href="{{ url_for('drive_settings') }}" class="{% if request.path == url_for('drive_settings') %}active{% endif %}">Drive Settings</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="site-footer">
+      <div class="container">
+        <span>© PDF Tools</span>
+      </div>
+    </footer>
+
+    {% block scripts %}{% endblock %}
+  </body>
+</html>

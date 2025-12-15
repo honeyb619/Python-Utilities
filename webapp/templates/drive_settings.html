@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Google Drive Settings{% endblock %}
+{% block content %}
+  <div class="app-header">
+    <div>
+      <h1>Google Drive Settings</h1>
+      <div class="app-sub">Connect your Google Drive account to upload merged and compressed PDFs directly.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    {% if connected %}
+      <div style="padding:1rem;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;margin-bottom:1rem">
+        <strong style="color:#15803d">✓ Connected to Google Drive</strong>
+        <p class="small" style="margin:0.5rem 0 0">You can now upload files directly to your Google Drive from Merge and Compress pages.</p>
+      </div>
+      
+      <form method="post" action="{{ url_for('drive_disconnect') }}">
+        <button type="submit" class="btn" style="background:#dc2626">Disconnect Google Drive</button>
+      </form>
+    {% else %}
+      <div style="padding:1rem;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;margin-bottom:1rem">
+        <strong style="color:#dc2626">Not connected</strong>
+        <p class="small" style="margin:0.5rem 0 0">Connect your Google Drive to enable file uploads.</p>
+      </div>
+      
+      <a href="{{ url_for('drive_auth') }}" class="btn">Connect Google Drive</a>
+      
+      <div class="small" style="margin-top:1rem;padding:1rem;background:#f1f5f9;border-radius:6px">
+        <strong>Setup Instructions:</strong>
+        <ol style="margin:0.5rem 0 0;padding-left:1.5rem">
+          <li>Set environment variables:
+            <pre style="background:#fff;padding:0.5rem;margin:0.5rem 0;border-radius:4px;overflow-x:auto"><code>GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+GOOGLE_REDIRECT_URI=http://localhost:5000/drive/callback</code></pre>
+          </li>
+          <li>Get credentials from <a href="https://console.cloud.google.com/apis/credentials" target="_blank" style="color:#2563eb">Google Cloud Console</a></li>
+          <li>Enable Google Drive API for your project</li>
+          <li>Add authorized redirect URI: <code style="background:#fff;padding:0.2rem 0.4rem;border-radius:3px">http://localhost:5000/drive/callback</code></li>
+        </ol>
+      </div>
+    {% endif %}
+  </div>
+{% endblock %}

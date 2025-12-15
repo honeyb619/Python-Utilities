@@ -1,13 +1,6 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1" />
-    <title>Merge PDFs</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
-  </head>
-  <body>
-    <div class="container">
+{% extends "base.html" %}
+{% block title %}Merge PDFs{% endblock %}
+{% block content %}
       <div class="app-header">
         <div>
           <h1>Merge PDFs</h1>
@@ -21,15 +14,28 @@
           <form id="merge-form" method="post" action="/merge" enctype="multipart/form-data">
             <div class="input-row">
               <label class="small">PDF Files (multiple)</label>
-              <input id="files-input" type="file" name="files" multiple accept="application/pdf" required />
+              <input id="files-input" type="file" name="files" multiple accept="application/pdf" required style="display:none" />
+              <button type="button" id="add-more-files" class="btn" style="background:#059669">+ Add files</button>
               <ul id="selected-files" class="file-list" aria-live="polite"></ul>
 
-              <label class="small">Page Size (optional)</label>
-              <input type="text" name="page_size" placeholder="largest, smallest, first, or 8.5inx11in" />
+              <label class="small">Global Page Size (optional)</label>
+              <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap">
+                <select id="page-size-select" style="flex:1;min-width:180px">
+                  <option value="">Preserve original</option>
+                  <option value="largest">Largest</option>
+                  <option value="smallest">Smallest</option>
+                  <option value="first">First</option>
+                  <option value="A4">A4 (210×297 mm)</option>
+                  <option value="Letter">Letter (8.5×11 in)</option>
+                  <option value="custom">Custom</option>
+                </select>
+                <input id="page-size-custom" type="text" placeholder="e.g. 8.5inx11in" style="flex:1;min-width:180px;display:none" />
+              </div>
+              <input type="hidden" name="page_size" id="page-size-hidden" value="" />
 
-              <div style="margin-top:0.5rem">
+              <div style="margin-top:0.5rem;display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
                 <button id="merge-button" class="btn" type="submit">Merge</button>
-                <span class="small" style="margin-left:0.5rem">Note: leaving page size blank preserves original sizes.</span>
+                <span class="small">Note: files with 'Use global' will use the global page size above.</span>
               </div>
             
             </div>
@@ -37,26 +43,32 @@
         </div>
 
         <div style="margin-top:0.75rem">
-          <div class="small" style="margin-bottom:0.35rem">Selected file preview</div>
-          <div class="preview-frames preview">
-            <iframe id="selected-preview" style="display:none"></iframe>
+          <div class="previews-row">
+            <div style="flex:1 1 520px">
+              <div class="preview-title">Selected file preview <button type="button" class="zoom-toggle" data-target="selected-preview" aria-pressed="false">🔍 Fit to width</button></div>
+              <div class="preview-frames preview" aria-label="Selected file preview">
+                <iframe id="selected-preview" style="display:none" title="Selected file preview" aria-label="Selected file preview" data-zoom="page-width"></iframe>
+              </div>
+            </div>
+
+            <div style="flex:1 1 520px">
+              <div class="preview-title">Merged PDF preview <button type="button" class="zoom-toggle" data-target="merged-preview" aria-pressed="false">🔍 Fit to width</button></div>
+              <div class="preview-frames preview" aria-label="Merged PDF preview">
+                <iframe id="merged-preview" style="display:none" title="Merged PDF preview" aria-label="Merged PDF preview" data-zoom="page-width"></iframe>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
 
-      const filesInput = document.getElementById('files-input'); 
-      const selectedFilesEl = document.getElementById('selected-files'); 
-        <div class="preview-frames preview">
-          <iframe id="merged-preview" style="display:none"></iframe>
-        </div>
-        <div style="margin-top:0.6rem">
+        <div style="margin-top:0.6rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
           <a id="merged-download" class="download-link" style="display:none" download="merged.pdf">Download merged PDF</a>
+          <button type="button" id="upload-to-drive-btn" class="btn" style="background:#1e88e5;display:none">📤 Upload to Drive</button>
         </div>
       </div>
 
-      <div class="footer">Templates are in webapp/templates — the UI shows selected files and previews.</div>
-    </div>
+{% endblock %}
 
+{% block scripts %}
     <script>
       const filesInput = document.getElementById('files-input');
       const selectedFilesEl = document.getElementById('selected-files');
@@ -86,16 +98,49 @@
           const li = document.createElement('li');
           li.draggable = true;
 
-          // reorder buttons
-          const up = document.createElement('button'); up.type = 'button'; up.textContent = '↑'; up.title = 'Move up';
-          const down = document.createElement('button'); down.type = 'button'; down.textContent = '↓'; down.title = 'Move down';
-          up.style.marginRight = '0.25rem'; down.style.marginRight = '0.45rem';
+          // drag handle icon
+          const dragHandle = document.createElement('span');
+          dragHandle.className = 'drag-handle';
+          dragHandle.textContent = '⋮⋮';
+          dragHandle.title = 'Drag to reorder';
+
+          // reorder buttons with enhanced styling
+          const up = document.createElement('button'); 
+          up.type = 'button'; 
+          up.className = 'reorder-btn';
+          up.textContent = '↑'; 
+          up.title = 'Move up';
+          up.disabled = idx === 0;
+          
+          const down = document.createElement('button'); 
+          down.type = 'button'; 
+          down.className = 'reorder-btn';
+          down.textContent = '↓'; 
+          down.title = 'Move down';
+          down.disabled = idx === selectedFilesArray.length - 1;
+          
           up.addEventListener('click', () => { if (idx > 0) { swapArray(selectedFilesArray, idx, idx-1); renderSelectedList(); } });
           down.addEventListener('click', () => { if (idx < selectedFilesArray.length - 1) { swapArray(selectedFilesArray, idx, idx+1); renderSelectedList(); } });
 
           const nameSpan = document.createElement('span');
+          nameSpan.className = 'file-name';
           nameSpan.textContent = f.name;
-          nameSpan.style.marginRight = '0.6rem';
+          nameSpan.style.flex = '1';
+          nameSpan.style.minWidth = '0';
+          nameSpan.style.overflow = 'hidden';
+          nameSpan.style.textOverflow = 'ellipsis';
+          nameSpan.style.whiteSpace = 'nowrap';
+
+          // remove button
+          const removeBtn = document.createElement('button');
+          removeBtn.type = 'button';
+          removeBtn.className = 'remove-btn';
+          removeBtn.textContent = '× Remove';
+          removeBtn.title = 'Remove file';
+          removeBtn.addEventListener('click', () => {
+            selectedFilesArray.splice(idx, 1);
+            renderSelectedList();
+          });
 
           // per-file resize selector
           const sel = document.createElement('select');
@@ -120,7 +165,8 @@
 
           nameSpan.addEventListener('click', () => {
             const url = URL.createObjectURL(f);
-            selectedPreview.src = url; selectedPreview.style.display = '';
+            const zoom = selectedPreview.dataset.zoom || 'page-width';
+            selectedPreview.src = url + '#zoom=' + zoom; selectedPreview.style.display = '';
           });
 
           // drag and drop handlers
@@ -142,11 +188,13 @@
             }
           });
 
+          li.appendChild(dragHandle);
           li.appendChild(up);
           li.appendChild(down);
           li.appendChild(nameSpan);
           li.appendChild(sel);
           li.appendChild(sizeInput);
+          li.appendChild(removeBtn);
           li.style.display = 'flex';
           li.style.alignItems = 'center';
           li.style.gap = '0.5rem';
@@ -154,19 +202,51 @@
           // auto-preview first file
           if (idx === 0) {
             const url = URL.createObjectURL(f);
-            selectedPreview.src = url; selectedPreview.style.display = '';
+            const zoom = selectedPreview.dataset.zoom || 'page-width';
+            selectedPreview.src = url + '#zoom=' + zoom; selectedPreview.style.display = '';
           }
         });
       }
 
+      const addMoreButton = document.getElementById('add-more-files');
+
       filesInput.addEventListener('change', (ev) => {
-        selectedFilesArray = Array.from(filesInput.files || []).map(f => ({ file: f, resize: 'preserve', customSize: '' }));
+        const newFiles = Array.from(filesInput.files || []).map(f => ({ file: f, resize: 'preserve', customSize: '' }));
+        // Append new files to existing array instead of replacing
+        selectedFilesArray = selectedFilesArray.concat(newFiles);
         renderSelectedList();
+      });
+
+      addMoreButton.addEventListener('click', () => {
+        filesInput.click();
+      });
+
+      // Page size select handlers
+      const pageSizeSelect = document.getElementById('page-size-select');
+      const pageSizeCustom = document.getElementById('page-size-custom');
+      const pageSizeHidden = document.getElementById('page-size-hidden');
+
+      pageSizeSelect.addEventListener('change', () => {
+        if (pageSizeSelect.value === 'custom') {
+          pageSizeCustom.style.display = '';
+          pageSizeHidden.value = pageSizeCustom.value;
+        } else {
+          pageSizeCustom.style.display = 'none';
+          pageSizeHidden.value = pageSizeSelect.value;
+        }
+      });
+
+      pageSizeCustom.addEventListener('input', () => {
+        pageSizeHidden.value = pageSizeCustom.value;
       });
 
       // AJAX submit so we can preview the merged PDF without leaving the page
       mergeForm.addEventListener('submit', async (ev) => {
         ev.preventDefault();
+        if (selectedFilesArray.length === 0) {
+          alert('Please select at least one PDF file.');
+          return;
+        }
         mergeButton.disabled = true;
         mergeButton.textContent = 'Merging...';
         mergedPreview.style.display = 'none';
@@ -190,11 +270,14 @@
           const resp = await fetch(mergeForm.action, { method: 'POST', body: fd });
           if (!resp.ok) throw new Error('Server returned ' + resp.status);
           const blob = await resp.blob();
+          mergedBlob = blob;
           const url = URL.createObjectURL(blob);
-          mergedPreview.src = url;
+          const zoom = mergedPreview.dataset.zoom || 'page-width';
+          mergedPreview.src = url + '#zoom=' + zoom;
           mergedPreview.style.display = '';
           mergedDownload.href = url;
           mergedDownload.style.display = '';
+          uploadToDriveBtn.style.display = '';
         } catch (err) {
           alert('Error: ' + err.message);
         } finally {
@@ -203,8 +286,73 @@
         }
       });
 
+        // zoom toggle helpers
+      function setPreviewZoom(iframeEl, mode){
+        iframeEl.dataset.zoom = mode;
+        if (iframeEl.src){
+          const base = iframeEl.src.split('#')[0];
+          iframeEl.src = base + '#zoom=' + mode;
+        }
+      }
+
+      function updateToggleButton(btn){
+        const target = document.getElementById(btn.dataset.target);
+        const mode = target.dataset.zoom || 'page-width';
+        if (mode === 'page-width'){
+          btn.textContent = '🔍 Fit to width';
+          btn.setAttribute('aria-pressed','false');
+        } else {
+          btn.textContent = '🔎 Actual size';
+          btn.setAttribute('aria-pressed','true');
+        }
+      }
+
+      document.querySelectorAll('.zoom-toggle').forEach(btn => {
+        updateToggleButton(btn);
+        btn.addEventListener('click', () => {
+          const target = document.getElementById(btn.dataset.target);
+          const next = (target.dataset.zoom === 'page-width') ? '100' : 'page-width';
+          setPreviewZoom(target, next);
+          updateToggleButton(btn);
+        });
+      });
+
+      // Upload to Drive functionality
+      const uploadToDriveBtn = document.getElementById('upload-to-drive-btn');
+      let mergedBlob = null;
+      
+      uploadToDriveBtn.addEventListener('click', async () => {
+        if (!mergedBlob) {
+          alert('No merged PDF available');
+          return;
+        }
+        
+        uploadToDriveBtn.disabled = true;
+        uploadToDriveBtn.textContent = '📤 Uploading...';
+        
+        try {
+          const fd = new FormData();
+          fd.append('file', mergedBlob, 'merged.pdf');
+          fd.append('filename', 'merged.pdf');
+          
+          const resp = await fetch('/drive/upload', { method: 'POST', body: fd });
+          const result = await resp.json();
+          
+          if (result.error) {
+            throw new Error(result.error);
+          }
+          
+          alert('✓ Uploaded to Google Drive successfully!\\nFile: ' + result.name);
+        } catch (err) {
+          alert('Upload failed: ' + err.message + '\\nMake sure you are connected to Google Drive in Settings.');
+        } finally {
+          uploadToDriveBtn.disabled = false;
+          uploadToDriveBtn.textContent = '📤 Upload to Drive';
+        }
+      });
+
       // initial state
       renderSelectedList();
     </script>
-  </body>
-</html>
+    </script>
+{% endblock %}
